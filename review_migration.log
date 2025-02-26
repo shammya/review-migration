@@ -1,0 +1,10 @@
+2025-02-26 20:35:33,289 - __main__ - INFO - Starting review migration process with batch size=1000, operations per second=10
+2025-02-26 20:35:33,314 - database - INFO - Connected to MySQL database successfully
+2025-02-26 20:35:33,327 - database - INFO - Connected to PostgreSQL database successfully
+2025-02-26 20:35:33,327 - csv_processor - INFO - Loaded 2 existing order IDs from CSV
+2025-02-26 20:35:33,330 - __main__ - INFO - Found 4 reviews to process
+2025-02-26 20:35:33,645 - __main__ - INFO - Progress: 100.00% (4/4). Batch time: 0.32s. Updates: 2 (total: 2), Inserts: 2 (total: 2). Est. completion: 14:35:33
+2025-02-26 20:35:33,646 - database - INFO - MySQL connection closed
+2025-02-26 20:35:33,647 - database - INFO - PostgreSQL connection closed
+2025-02-26 20:35:33,647 - __main__ - INFO - Review migration completed. Total updates: 2, Total inserts: 2
+2025-02-26 20:35:33,647 - __main__ - INFO - Total execution time: 0.32 seconds (00:00:00)
