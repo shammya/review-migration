@@ -1,10 +1,38 @@
-2025-02-26 20:35:33,289 - __main__ - INFO - Starting review migration process with batch size=1000, operations per second=10
-2025-02-26 20:35:33,314 - database - INFO - Connected to MySQL database successfully
-2025-02-26 20:35:33,327 - database - INFO - Connected to PostgreSQL database successfully
-2025-02-26 20:35:33,327 - csv_processor - INFO - Loaded 2 existing order IDs from CSV
-2025-02-26 20:35:33,330 - __main__ - INFO - Found 4 reviews to process
-2025-02-26 20:35:33,645 - __main__ - INFO - Progress: 100.00% (4/4). Batch time: 0.32s. Updates: 2 (total: 2), Inserts: 2 (total: 2). Est. completion: 14:35:33
-2025-02-26 20:35:33,646 - database - INFO - MySQL connection closed
-2025-02-26 20:35:33,647 - database - INFO - PostgreSQL connection closed
-2025-02-26 20:35:33,647 - __main__ - INFO - Review migration completed. Total updates: 2, Total inserts: 2
-2025-02-26 20:35:33,647 - __main__ - INFO - Total execution time: 0.32 seconds (00:00:00)
+2025-03-02 13:04:40,419 - __main__ - INFO - Starting review migration process with batch size=1000, operations per second=10
+2025-03-02 13:04:43,171 - database - INFO - Connected to MySQL database successfully
+2025-03-02 13:04:45,124 - database - INFO - Connected to PostgreSQL database successfully
+2025-03-02 13:04:45,175 - csv_processor - INFO - Loaded 34478 existing order IDs from CSV
+2025-03-02 13:04:50,378 - __main__ - INFO - Found 597127 reviews to process
+2025-03-02 13:17:57,719 - __main__ - INFO - Progress: 0.17% (1000/597127). Batch time: 787.34s. Updates: 1 (total: 1), Inserts: 999 (total: 999). Est. completion: 17:40:32
+2025-03-02 13:31:58,810 - __main__ - INFO - Progress: 0.33% (2000/597127). Batch time: 841.09s. Updates: 196 (total: 197), Inserts: 804 (total: 1803). Est. completion: 22:08:00
+2025-03-02 13:45:41,082 - __main__ - INFO - Progress: 0.50% (3000/597127). Batch time: 822.27s. Updates: 239 (total: 436), Inserts: 761 (total: 2564). Est. completion: 22:34:44
+2025-03-02 13:59:26,417 - __main__ - INFO - Progress: 0.67% (4000/597127). Batch time: 825.33s. Updates: 12 (total: 448), Inserts: 988 (total: 3552). Est. completion: 22:55:43
+2025-03-02 14:13:35,730 - __main__ - INFO - Progress: 0.84% (5000/597127). Batch time: 849.31s. Updates: 12 (total: 460), Inserts: 988 (total: 4540). Est. completion: 23:56:02
+2025-03-02 14:26:44,258 - __main__ - INFO - Progress: 1.00% (6000/597127). Batch time: 788.53s. Updates: 8 (total: 468), Inserts: 992 (total: 5532). Est. completion: 22:55:25
+2025-03-02 14:40:06,495 - __main__ - INFO - Progress: 1.17% (7000/597127). Batch time: 802.24s. Updates: 12 (total: 480), Inserts: 988 (total: 6520). Est. completion: 22:31:37
+2025-03-02 14:48:15,800 - __main__ - INFO - Received interrupt signal. Will exit after current batch completes...
+2025-03-02 16:14:53,618 - __main__ - INFO - Starting review migration process with batch size=1000, operations per second=10
+2025-03-02 16:14:53,618 - rate_limiter - INFO - Rate limiting is disabled
+2025-03-02 16:14:55,463 - database - INFO - Connected to MySQL database successfully
+2025-03-02 16:14:57,314 - database - INFO - Connected to PostgreSQL database successfully
+2025-03-02 16:14:57,364 - csv_processor - INFO - Loaded 34478 existing order IDs from CSV
+2025-03-02 16:14:57,998 - __main__ - INFO - Found 597204 reviews to process
+2025-03-02 16:14:58,000 - __main__ - INFO - Resuming from offset 8000 (last order_id: 10187918)
+2025-03-02 16:28:16,856 - __main__ - INFO - Progress: 1.51% (9000/597204). Batch time: 798.86s. Updates: 8 (total: 8), Inserts: 992 (total: 992). Est. completion: 00:58:26
+2025-03-02 16:30:10,308 - __main__ - INFO - Received interrupt signal. Will exit after current batch completes...
+2025-03-02 16:42:00,816 - __main__ - INFO - Progress: 1.67% (10000/597204). Batch time: 823.96s. Updates: 12 (total: 20), Inserts: 988 (total: 1980). Est. completion: 13:10:13
+2025-03-02 16:42:00,820 - __main__ - INFO - Saved state: offset=10000, last_order_id=10250134
+2025-03-02 16:42:01,077 - database - INFO - MySQL connection closed
+2025-03-02 16:42:01,088 - database - INFO - PostgreSQL connection closed
+2025-03-02 16:42:01,088 - __main__ - INFO - Review migration interrupted. Total updates: 20, Total inserts: 1980
+2025-03-02 16:42:01,088 - __main__ - INFO - Total execution time: 1623.09 seconds (00:27:03)
+2025-03-02 16:42:01,088 - __main__ - INFO - Migration was interrupted. Run with --resume to continue from this point.
+2025-03-02 17:03:59,331 - __main__ - INFO - Starting review migration process with batch size=1000, operations per second=50
+2025-03-02 17:03:59,331 - rate_limiter - INFO - Rate limiting is disabled
+2025-03-02 17:04:01,262 - database - INFO - Connected to MySQL database successfully
+2025-03-02 17:04:03,523 - database - INFO - Connected to PostgreSQL database successfully
+2025-03-02 17:04:03,581 - csv_processor - INFO - Loaded 34478 existing order IDs from CSV
+2025-03-02 17:04:04,292 - __main__ - INFO - Found 597229 reviews to process
+2025-03-02 17:04:04,293 - __main__ - INFO - Resuming from offset 10000 (last order_id: 10250134)
+2025-03-02 17:17:50,444 - __main__ - INFO - Progress: 1.84% (11000/597229). Batch time: 826.15s. Updates: 12 (total: 12), Inserts: 988 (total: 988). Est. completion: 23:31:38
+2025-03-02 17:31:06,484 - __main__ - INFO - Progress: 2.01% (12000/597229). Batch time: 796.04s. Updates: 8 (total: 20), Inserts: 992 (total: 1980). Est. completion: 09:29:39

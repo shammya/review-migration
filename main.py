@@ -4,11 +4,16 @@
 import logging
 import time
 import argparse
+import signal
+import sys
 from typing import Dict, List, Set, Tuple, Any
 
 import config
 from database import DatabaseManager
-from csv_processor import load_existing_order_ids
+from csv_processor import load_existing_order_ids, save_processed_order_id
+
+# Flag to indicate if the process was interrupted
+interrupted = False
 
 
 def setup_logging(log_level=None):
@@ -58,17 +63,49 @@ def parse_args():
         help="Operations per second (rate limit)",
     )
     parser.add_argument(
+        "--disable-rate-limit", action="store_true", help="Disable rate limiting"
+    )
+    parser.add_argument(
         "--log-level",
         type=str,
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level",
     )
+    parser.add_argument(
+        "--resume", action="store_true", help="Resume from last saved state"
+    )
+    parser.add_argument(
+        "--force-start",
+        action="store_true",
+        help="Force start from beginning (ignore saved state)",
+    )
+    parser.add_argument(
+        "--update-existing-only",
+        action="store_true",
+        help="Only update existing records, don't insert new ones",
+    )
     return parser.parse_args()
+
+
+def signal_handler(sig, frame):
+    """
+    Handle interruption signals (Ctrl+C).
+
+    This allows for a graceful shutdown where state is saved.
+    """
+    global interrupted
+    logger = logging.getLogger(__name__)
+    logger.info("Received interrupt signal. Will exit after current batch completes...")
+    interrupted = True
 
 
 def main():
     """Main function to orchestrate the review migration process."""
+    # Register signal handler for graceful interruption
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     # Parse arguments
     args = parse_args()
 
@@ -89,7 +126,9 @@ def main():
         logger.info("DRY RUN MODE: No changes will be made to the database")
 
     # Initialize database manager
-    db_manager = DatabaseManager(dry_run=args.dry_run)
+    db_manager = DatabaseManager(
+        dry_run=args.dry_run, enable_rate_limiting=not args.disable_rate_limit
+    )
 
     # Connect to databases
     if not db_manager.connect_mysql():
@@ -113,31 +152,69 @@ def main():
         total_reviews = db_manager.get_total_review_count()
         logger.info(f"Found {total_reviews} reviews to process")
 
-        # Process reviews in batches
+        # Check if we should resume from a saved state
         offset = 0
+        last_order_id = 0
+
+        if args.resume and not args.force_start:
+            state = config.load_state()
+            if state["offset"] > 0:
+                offset = state["offset"]
+                last_order_id = state["last_order_id"]
+                logger.info(
+                    f"Resuming from offset {offset} (last order_id: {last_order_id})"
+                )
+            else:
+                logger.info("No saved state found. Starting from the beginning.")
+
+        # Process reviews in batches
         total_updates = 0
         total_inserts = 0
         start_time = time.time()
 
-        while offset < total_reviews:
+        while offset < total_reviews and not interrupted:
             batch_start_time = time.time()
 
             # Fetch a batch of reviews
-            reviews = db_manager.fetch_reviews_batch(offset)
+            if last_order_id > 0 and offset == state.get("offset", 0):
+                # If resuming, fetch based on last_order_id
+                reviews, new_offset = db_manager.fetch_reviews_from_order_id(
+                    last_order_id, config.BATCH_SIZE
+                )
+                offset = new_offset
+            else:
+                # Normal fetching by offset
+                reviews = db_manager.fetch_reviews_batch(offset)
+
             if not reviews:
                 logger.warning(f"No reviews fetched at offset {offset}. Breaking loop.")
                 break
 
             # Process the batch
-            updates, inserts = db_manager.process_batch_with_rate_limit(
-                reviews, existing_order_ids
-            )
-            total_updates += updates
-            total_inserts += inserts
+            if args.update_existing_only:
+                # Only process records that exist in existing_order_ids
+                reviews_to_process = [
+                    r for r in reviews if r["order_id"] in existing_order_ids
+                ]
+                logger.info(
+                    f"Processing {len(reviews_to_process)}/{len(reviews)} reviews (update-only mode)"
+                )
+                updates, _ = db_manager.process_batch_with_rate_limit(
+                    reviews_to_process, existing_order_ids
+                )
+                total_updates += updates
+                inserts = 0
+            else:
+                # Process all records
+                updates, inserts = db_manager.process_batch_with_rate_limit(
+                    reviews, existing_order_ids
+                )
+                total_updates += updates
+                total_inserts += inserts
 
             # Update progress
             offset += len(reviews)
-            progress = (offset / total_reviews) * 100
+            progress = min(100, (offset / total_reviews) * 100)
             batch_time = time.time() - batch_start_time
             elapsed_time = time.time() - start_time
 
@@ -160,24 +237,37 @@ def main():
                 + f"Est. completion: {est_completion}"
             )
 
+            # Save state after each batch (already happens in fetch_reviews_batch)
+
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
     except Exception as e:
         logger.error(f"Unexpected error in main process: {e}", exc_info=True)
     finally:
+        # Save final state
+        last_order_id = db_manager.last_processed_order_id
+        config.save_state(offset, last_order_id)
+        logger.info(f"Saved state: offset={offset}, last_order_id={last_order_id}")
+
         # Close database connections
         db_manager.close_connections()
 
         # Log completion
         total_time = time.time() - start_time
         logger.info(
-            f"Review migration completed. Total updates: {total_updates}, "
-            + f"Total inserts: {total_inserts}"
+            f"Review migration {'completed' if offset >= total_reviews else 'interrupted'}. "
+            + f"Total updates: {total_updates}, Total inserts: {total_inserts}"
         )
         logger.info(
             f"Total execution time: {total_time:.2f} seconds "
             + f"({time.strftime('%H:%M:%S', time.gmtime(total_time))})"
         )
+
+        if interrupted:
+            logger.info(
+                "Migration was interrupted. Run with --resume to continue from this point."
+            )
+            sys.exit(130)  # Standard exit code for Ctrl+C
 
 
 if __name__ == "__main__":

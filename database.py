@@ -1,6 +1,7 @@
 # database.py
 """Module for managing database connections and operations."""
 
+import json
 import time
 import logging
 from typing import Dict, List, Set, Tuple, Any, Optional
@@ -11,6 +12,7 @@ from psycopg2.extras import DictCursor
 
 import config
 from rate_limiter import RateLimiter
+from config import save_state
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +20,22 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """Manages database connections and operations for review migration."""
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, enable_rate_limiting: bool = True):
         """
         Initialize the DatabaseManager.
 
         Args:
             dry_run: If True, no actual changes will be made to databases
+            enable_rate_limiting: Whether to enable rate limiting
         """
         self.mysql_conn = None
         self.postgres_conn = None
         self.dry_run = dry_run
         self.rate_limiter = RateLimiter(
-            operations_per_second=config.OPERATIONS_PER_SECOND
+            operations_per_second=config.OPERATIONS_PER_SECOND,
+            enabled=enable_rate_limiting,
         )
+        self.last_processed_order_id = 0
 
     def connect_mysql(self) -> bool:
         """
@@ -103,17 +108,75 @@ class DatabaseManager:
                 query = """
                     SELECT 
                         order_id, order_number, company_id, rating, review, 
-                        review_time, driver_rating, carrier_id, carrier_name, order_type
+                        review_time, driver_rating, carrier_id, carrier_name, order_type,
+                        sentiment
                     FROM review
                     ORDER BY order_id
                     LIMIT %s OFFSET %s
                 """
                 cursor.execute(query, (config.BATCH_SIZE, offset))
                 records = [dict(record) for record in cursor.fetchall()]
+
+                # If records were returned, update the last processed order_id
+                if records:
+                    self.last_processed_order_id = records[-1]["order_id"]
+                    # Save state after each batch
+                    save_state(offset + len(records), self.last_processed_order_id)
+
                 return records
         except psycopg2.Error as err:
             logger.error(f"Error fetching reviews from PostgreSQL: {err}")
             return []
+
+    def fetch_reviews_from_order_id(
+        self, last_order_id: int, limit: int
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Fetch reviews starting from a specific order_id.
+        Used for resuming processing after an interruption.
+
+        Args:
+            last_order_id: The order_id to start from
+            limit: Maximum number of records to fetch
+
+        Returns:
+            Tuple of (list of records, new offset)
+        """
+        try:
+            with self.postgres_conn.cursor(cursor_factory=DictCursor) as cursor:
+                # First get the row number of the last processed order_id
+                position_query = """
+                    SELECT COUNT(*) FROM review
+                    WHERE order_id <= %s
+                """
+                cursor.execute(position_query, (last_order_id,))
+                position = cursor.fetchone()[0]
+
+                # Now fetch the next batch starting from this position
+                query = """
+                    SELECT 
+                        order_id, order_number, company_id, rating, review, 
+                        review_time, driver_rating, carrier_id, carrier_name, order_type,
+                        sentiment
+                    FROM review
+                    WHERE order_id > %s
+                    ORDER BY order_id
+                    LIMIT %s
+                """
+                cursor.execute(query, (last_order_id, limit))
+                records = [dict(record) for record in cursor.fetchall()]
+
+                # Calculate the new offset
+                new_offset = position
+
+                # Update last processed order_id if we have records
+                if records:
+                    self.last_processed_order_id = records[-1]["order_id"]
+
+                return records, new_offset
+        except psycopg2.Error as err:
+            logger.error(f"Error fetching reviews from PostgreSQL: {err}")
+            return [], 0
 
     def update_review_time(
         self, order_id: int, order_type: str, review_time: Any
@@ -137,8 +200,6 @@ class DatabaseManager:
             with self.mysql_conn.cursor() as cursor:
                 # Convert timestamp to Unix timestamp
                 review_time_unix = int(time.mktime(review_time.timetuple()))
-                if config.TIMESTAMP_IN_MS:
-                    review_time_unix *= 1000  # Convert to milliseconds
 
                 query = """
                     UPDATE review_analysis
@@ -182,17 +243,15 @@ class DatabaseManager:
                 review_time_unix = int(
                     time.mktime(review_data["review_time"].timetuple())
                 )
-                if config.TIMESTAMP_IN_MS:
-                    review_time_unix *= 1000  # Convert to milliseconds
 
                 # Set up the query - note we're only inserting non-generated columns
                 query = """
                     INSERT INTO review_analysis (
                         company_id, order_id, carrier_id, order_number,
                         driver_name, order_type, food_rating, driver_rating,
-                        review_time, review_text
+                        review_time, review_text, review_analysis
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 """
 
@@ -208,6 +267,9 @@ class DatabaseManager:
                     review_data["driver_rating"],
                     review_time_unix,
                     review_data["review"],
+                    json.dumps(
+                        review_data.get("sentiment")
+                    ),  # Map sentiment to review_analysis
                 )
 
                 cursor.execute(query, values)
@@ -254,3 +316,12 @@ class DatabaseManager:
                     inserts += 1
 
         return updates, inserts
+
+    def set_rate_limiting(self, enabled: bool) -> None:
+        """
+        Enable or disable rate limiting.
+
+        Args:
+            enabled: Whether to enable rate limiting
+        """
+        self.rate_limiter.set_enabled(enabled)
